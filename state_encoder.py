@@ -1,125 +1,130 @@
 # ==================================================
 # STATE ENCODER
-# Converts environment information into a
-# compact discrete state for tabular Q-learning
+# Compact discrete state for tabular Q-learning
 # ==================================================
-
-
-def encode_sensor(observation):
-    """
-    Convert the 3x3 sensor matrix into a tuple.
-    """
-
-    return tuple(
-        value
-        for row in observation
-        for value in row
-    )
 
 
 def get_battery_category(battery):
     """
-    Convert battery percentage into 4 categories.
+    Convert battery percentage into a discrete category.
+
+    0 = HIGH
+    1 = MEDIUM
+    2 = LOW
+    3 = CRITICAL
     """
 
     if battery >= 75:
-        return 0          # HIGH
+        return 0
 
     elif battery >= 50:
-        return 1          # MEDIUM
+        return 1
 
     elif battery >= 25:
-        return 2          # LOW
+        return 2
 
     else:
-        return 3          # CRITICAL
+        return 3
 
 
 def get_health_category(health):
     """
-    Convert survivor health into 4 categories.
+    Convert survivor health into a discrete category.
+
+    0 = HIGH
+    1 = MEDIUM
+    2 = LOW
+    3 = CRITICAL
     """
 
     if health >= 75:
-        return 0          # HIGH
+        return 0
 
     elif health >= 50:
-        return 1          # MEDIUM
+        return 1
 
     elif health >= 25:
-        return 2          # LOW
+        return 2
 
     else:
-        return 3          # CRITICAL
+        return 3
 
 
 def get_survivor_direction(robot, survivor):
     """
-    Find the approximate direction of a survivor
+    Find the main direction of the target survivor
     relative to the robot.
 
-    Returns:
-        0 = SAME CELL
-        1 = UP
-        2 = DOWN
-        3 = LEFT
-        4 = RIGHT
-        5 = UNKNOWN
+    0 = NO TARGET
+    1 = UP
+    2 = DOWN
+    3 = LEFT
+    4 = RIGHT
+    5 = SAME CELL
     """
+
+    if survivor is None:
+        return 0
 
     robot_row, robot_col = robot
     survivor_row, survivor_col = survivor
 
-    # Same position
     if robot == survivor:
-        return 0
+        return 5
 
-    # Compare vertical and horizontal distance
     row_difference = survivor_row - robot_row
     col_difference = survivor_col - robot_col
 
-    # Choose the dominant direction
+    # Choose the direction with the larger distance
     if abs(row_difference) >= abs(col_difference):
 
         if row_difference < 0:
-            return 1     # UP
-
+            return 1       # UP
         else:
-            return 2     # DOWN
+            return 2       # DOWN
 
     else:
 
         if col_difference < 0:
-            return 3     # LEFT
-
+            return 3       # LEFT
         else:
-            return 4     # RIGHT
+            return 4       # RIGHT
 
 
 def create_state(
-    robot,
     local_observation,
+    robot,
     target_survivor,
     target_health,
     battery
 ):
     """
-    Create the final discrete state for Q-learning.
+    Create a compact discrete state for Q-learning.
+
+    Only the four cells immediately around the robot
+    are used from the 3x3 sensor.
     """
 
-    # Convert 3x3 observation into a tuple
-    sensor_state = encode_sensor(local_observation)
+    # --------------------------------------------------
+    # Extract the four neighbouring cells
+    # --------------------------------------------------
 
-    # Battery category
-    battery_state = get_battery_category(
-        battery
-    )
+    up = local_observation[0][1]
 
+    down = local_observation[2][1]
+
+    left = local_observation[1][0]
+
+    right = local_observation[1][2]
+
+    # --------------------------------------------------
     # Target information
+    # --------------------------------------------------
+
     if target_survivor is None:
 
-        target_direction = 5
-        health_state = 3
+        target_direction = 0
+        target_health_category = 4
 
     else:
 
@@ -128,16 +133,30 @@ def create_state(
             target_survivor
         )
 
-        health_state = get_health_category(
+        target_health_category = get_health_category(
             target_health
         )
 
-    # Final state
+    # --------------------------------------------------
+    # Battery information
+    # --------------------------------------------------
+
+    battery_category = get_battery_category(
+        battery
+    )
+
+    # --------------------------------------------------
+    # Final discrete state
+    # --------------------------------------------------
+
     state = (
-        sensor_state,
+        up,
+        down,
+        left,
+        right,
         target_direction,
-        health_state,
-        battery_state
+        target_health_category,
+        battery_category
     )
 
     return state
