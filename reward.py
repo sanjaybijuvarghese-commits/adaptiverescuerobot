@@ -1,46 +1,69 @@
+import random
+import numpy as np
+
+ACTIONS = {
+    0: "UP",
+    1: "DOWN",
+    2: "LEFT",
+    3: "RIGHT"
+}
+
+# Policy configuration
+
+INITIAL_EPSILON = 1.0
+MIN_EPSILON = 0.01
+EPSILON_DECAY = 0.995
+
+def choose_action(q_values, epsilon):
+    # Exploration
+    if random.random() < epsilon:
+        return random.choice(list(ACTIONS.keys()))
+
+    # Exploitation (greedy action)
+    max_q = np.max(q_values)
+
+    # Get all actions having the maximum Q-value
+    best_actions = [
+        action for action, q_value in enumerate(q_values)
+        if q_value == max_q
+    ]
+
+    # Randomly choose among equally good actions
+    return random.choice(best_actions)
+
+def decay_epsilon(epsilon):
+    epsilon = epsilon * EPSILON_DECAY
+    return max(MIN_EPSILON, epsilon)
+
 def calculate_reward(
-    moved,
-    hit_obstacle,
-    entered_hazard,
-    discovered_survivor,
-    rescued_survivor,
-    survivor_lost,
-    battery_empty,
-    mission_complete
+    rescued=False,
+    survivor_health=None,
+    hit_obstacle=False,
+    entered_hazard=False,
+    survivor_lost=False,
+    battery_depleted=False
 ):
+    reward = -1
 
-    reward = 0
-
-    # 1. Normal movement
-    if moved:
-        reward -= 1
-
-    # 2. Hit obstacle / invalid movement
     if hit_obstacle:
-        reward -= 5
+        reward -= 10
 
-    # 3. Entered hazard
     if entered_hazard:
-        reward -= 20
-
-    # 4. Discovered a survivor
-    if discovered_survivor:
-        reward += 10
-
-    # 5. Rescued a survivor
-    if rescued_survivor:
-        reward += 50
-
-    # 6. Survivor was lost
-    if survivor_lost:
-        reward -= 50
-
-    # 7. Battery became empty
-    if battery_empty:
         reward -= 30
 
-    # 8. All survivors rescued
-    if mission_complete:
-        reward += 100
+    if rescued:
+        if survivor_health is not None:
+            if survivor_health <= 20:
+                reward += 150
+            elif survivor_health <= 50:
+                reward += 120
+            else:
+                reward += 100
+
+    if survivor_lost:
+        reward -= 100
+
+    if battery_depleted:
+        reward -= 100
 
     return reward
