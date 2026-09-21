@@ -1,0 +1,204 @@
+import random
+import pickle
+import pygame
+
+from config import *
+from environment import Environment
+from visualization import Visualization
+# Assuming your encoder functions are in state_encoder.py
+# If they are inside environment.py, change this import accordingly:
+from state_encoder import create_state
+
+
+class QLearningAgent:
+    def __init__(self, actions=[0, 1, 2, 3], lr=0.1, gamma=0.95, epsilon=1.0, epsilon_decay=0.995, min_epsilon=0.05):
+        self.actions = actions
+        self.lr = lr                      # Learning rate (alpha)
+        self.gamma = gamma                # Discount factor
+        self.epsilon = epsilon            # Exploration rate
+        self.epsilon_decay = epsilon_decay
+        self.min_epsilon = min_epsilon
+
+        # Tabular Q-values stored as: {encoded_state_tuple: [q_0, q_1, q_2, q_3]}
+        self.q_table = {}
+
+    def get_q_values(self, state):
+        """Returns Q-values for a state, initializing with zeros if unvisited."""
+        if state not in self.q_table:
+            self.q_table[state] = [0.0 for _ in self.actions]
+        return self.q_table[state]
+
+    def choose_action(self, state):
+        """Epsilon-greedy action selection."""
+        if random.random() < self.epsilon:
+            return random.choice(self.actions)
+
+        q_values = self.get_q_values(state)
+        max_val = max(q_values)
+        # Random tie-breaking among best actions
+        best_actions = [a for a, val in enumerate(q_values) if val == max_val]
+        return random.choice(best_actions)
+
+    def update(self, state, action, reward, next_state, done):
+        """Bellman equation update for Q-Learning."""
+        current_q = self.get_q_values(state)[action]
+
+        if done:
+            target = reward
+        else:
+            max_next_q = max(self.get_q_values(next_state))
+            target = reward + self.gamma * max_next_q
+
+        # Temporal difference update
+        self.q_table[state][action] = current_q + self.lr * (target - current_q)
+
+    def decay_epsilon(self):
+        """Decays exploration probability after each episode."""
+        self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
+
+    def save_policy(self, filename="q_table.pkl"):
+        with open(filename, "wb") as f:
+            pickle.dump(self.q_table, f)
+
+    def load_policy(self, filename="q_table.pkl"):
+        with open(filename, "rb") as f:
+            self.q_table = pickle.load(f)
+
+
+# ==========================================================
+# HELPER: CONVERT RAW ENV STATE TO ENCODED STATE
+# ==========================================================
+
+def extract_encoded_state(raw_state):
+    """
+    Selects the best target survivor from the robot's known memory
+    and feeds parameters into create_state().
+    """
+    robot = raw_state["robot"]
+    local_obs = raw_state["local_observation"]
+    battery = raw_state["battery"]
+    known_survivors = raw_state["known_survivors"]
+    rescued = raw_state["rescued_survivors"]
+    lost = raw_state["lost_survivors"]
+
+    # Filter out survivors that are already rescued or lost
+    active_targets = {
+        pos: health
+        for pos, health in known_survivors.items()
+        if pos not in rescued and pos not in lost
+    }
+
+    target_survivor = None
+    target_health = None
+
+    if active_targets:
+        # Target the nearest active known survivor using Manhattan distance
+        target_survivor = min(
+            active_targets.keys(),
+            key=lambda pos: abs(pos[0] - robot[0]) + abs(pos[1] - robot[1])
+        )
+        target_health = active_targets[target_survivor]
+
+    return create_state(
+        robot=robot,
+        local_observation=local_obs,
+        target_survivor=target_survivor,
+        target_health=target_health,
+        battery=battery
+    )
+
+
+# ==========================================================
+# FAST TRAINING PIPELINE (No Graphics)
+# ==========================================================
+
+def train(episodes=2000):
+    env = Environment()
+    agent = QLearningAgent(lr=0.1, gamma=0.95, epsilon=1.0, epsilon_decay=0.997, min_epsilon=0.05)
+
+    print(f"--- Starting Training ({episodes} episodes) ---")
+
+    for ep in range(1, episodes + 1):
+        raw_state = env.reset()
+        state = extract_encoded_state(raw_state)
+        total_reward = 0
+        done = False
+
+        while not done:
+            action = agent.choose_action(state)
+            raw_next_state, reward, done, info = env.step(action)
+            next_state = extract_encoded_state(raw_next_state)
+
+            agent.update(state, action, reward, next_state, done)
+
+            state = next_state
+            total_reward += reward
+
+        agent.decay_epsilon()
+
+        if ep % 100 == 0:
+            rescued_count = len(env.rescued_survivors)
+            print(f"Ep {ep:4d}/{episodes} | Epsilon: {agent.epsilon:.3f} | Reward: {total_reward:4d} | Rescued: {rescued_count}/{env.num_survivors} | Ended: {info.get('reason')}")
+
+    agent.save_policy("q_table.pkl")
+    print("Training finished. Q-table saved to 'q_table.pkl'.\n")
+    return agent
+
+
+# ==========================================================
+# TEST SIMULATION (Live Pygame Window)
+# ==========================================================
+
+def run_simulation():
+    pygame.init()
+    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+    pygame.display.set_caption("Adaptive Rescue Robot - Q-Learning Simulation")
+    clock = pygame.time.Clock()
+
+    env = Environment()
+    viz = Visualization()
+
+    agent = QLearningAgent(epsilon=0.0)  # Pure exploitation
+    try:
+        agent.load_policy("q_table.pkl")
+        print("Loaded trained policy from q_table.pkl")
+    except FileNotFoundError:
+        print("Warning: q_table.pkl not found! Robot will act randomly.")
+
+    raw_state = env.reset()
+    state = extract_encoded_state(raw_state)
+
+    running = True
+    step_delay_ms = 200  # 200ms per step so the robot's choices are watchable
+    last_step_time = pygame.time.get_ticks()
+
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:  # Press R to reset the disaster scenario
+                    raw_state = env.reset()
+                    state = extract_encoded_state(raw_state)
+
+        # Run step on timer
+        now = pygame.time.get_ticks()
+        if now - last_step_time >= step_delay_ms and not env.terminated:
+            action = agent.choose_action(state)
+            raw_next_state, _, done, _ = env.step(action)
+            state = extract_encoded_state(raw_next_state)
+            last_step_time = now
+
+        viz.draw(screen, env)
+        pygame.display.flip()
+        clock.tick(FPS)
+
+    pygame.quit()
+
+
+if __name__ == "__main__":
+    # 1. Train the agent
+    train(episodes=2000)
+
+    # 2. Watch the learned policy run
+    run_simulation()
