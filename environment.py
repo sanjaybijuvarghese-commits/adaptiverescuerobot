@@ -1,5 +1,6 @@
 import random
 from reward import calculate_reward
+from state_encoder import create_state
 
 from config import (
     ROWS,
@@ -84,7 +85,7 @@ class Environment:
 
         self.update_world_model()
 
-        return self.get_state()
+        return self.get_rl_state()
 
     # ==================================================
     # FIND RANDOM EMPTY CELL
@@ -349,6 +350,9 @@ class Environment:
 
         row, col = self.robot
 
+        # Keep track of newly discovered survivors
+        newly_discovered = []
+
         # Check the 3x3 area around the robot
         for r in range(row - 1, row + 2):
 
@@ -365,38 +369,108 @@ class Environment:
 
                 cell = (r, c)
 
+                # -----------------------------
                 # Obstacle
+                # -----------------------------
+
                 if cell in self.obstacles:
 
                     self.known_cells[cell] = "obstacle"
                     self.known_obstacles.add(cell)
 
+                # -----------------------------
                 # Hazard
+                # -----------------------------
+
                 elif cell in self.hazards:
 
                     self.known_cells[cell] = "hazard"
                     self.known_hazards.add(cell)
 
+                # -----------------------------
                 # Survivor
+                # -----------------------------
+
                 elif cell in self.survivors:
 
                     self.known_cells[cell] = "survivor"
 
+                    # Check whether this survivor
+                    # was discovered for the first time
+                    if cell not in self.known_survivors:
+
+                        newly_discovered.append(cell)
+
+                    # Store current health
                     if cell in self.survivor_health:
 
                         self.known_survivors[cell] = (
                             self.survivor_health[cell]
                         )
 
+                # -----------------------------
                 # Robot
+                # -----------------------------
+
                 elif cell == self.robot:
 
                     self.known_cells[cell] = "robot"
 
+                # -----------------------------
                 # Empty
+                # -----------------------------
+
                 else:
 
                     self.known_cells[cell] = "empty"
+
+        return newly_discovered
+
+        # ==================================================
+    # SELECT LOWEST-HEALTH DISCOVERED SURVIVOR
+    # ==================================================
+
+    def select_target_survivor(self):
+
+        candidates = {}
+
+        # Look only at survivors known to the robot
+        for survivor, health in self.known_survivors.items():
+
+            # Ignore survivors already rescued
+            if survivor in self.rescued_survivors:
+                continue
+
+            # Ignore survivors already lost
+            if survivor in self.lost_survivors:
+                continue
+
+            candidates[survivor] = health
+
+        # No valid known survivor
+        if not candidates:
+            return None
+
+        # Select survivor with the lowest known health
+        target = min(
+            candidates,
+            key=candidates.get
+        )
+
+        return target             
+
+        # ==================================================
+    # CHECK WHETHER ROBOT SHOULD EXPLORE
+    # ==================================================
+
+    def should_explore(self):
+
+        target = self.select_target_survivor()
+
+        if target is None:
+            return True
+
+        return False   
 
     # ==================================================
     # UPDATE SURVIVOR HEALTH
@@ -433,6 +507,20 @@ class Environment:
                 )
 
         return newly_lost
+
+        # ==================================================
+    # SYNCHRONIZE KNOWN SURVIVOR HEALTH
+    # ==================================================
+
+    def update_known_survivor_health(self):
+
+        for survivor in self.known_survivors:
+
+            if survivor in self.survivor_health:
+
+                self.known_survivors[survivor] = (
+                    self.survivor_health[survivor]
+                )
 
     # ==================================================
     # SPREAD HAZARDS
@@ -591,7 +679,10 @@ class Environment:
 
         moved, hit_obstacle, entered_hazard = self.move_robot(action)
 
-        self.update_world_model()
+        # Scan surroundings and detect newly discovered survivors
+        newly_discovered = self.update_world_model()
+
+        discovered_survivor = len(newly_discovered) > 0 
 
         # -----------------------------
         # Battery decreases
@@ -607,6 +698,8 @@ class Environment:
         # -----------------------------
 
         newly_lost = self.update_survivor_health()
+
+        self.update_known_survivor_health()
 
         survivor_lost = len(newly_lost) > 0
 
@@ -740,3 +833,35 @@ class Environment:
             "known_obstacles":
                 self.known_obstacles.copy()
         }
+
+        # ==================================================
+    # GET COMPACT RL STATE
+    # ==================================================
+
+    def get_rl_state(self):
+
+        # Current 3x3 observation
+        observation = self.get_local_observation()
+
+        # Select lowest-health discovered survivor
+        target_survivor = self.select_target_survivor()
+
+        # Get target health
+        if target_survivor is not None:
+
+            target_health = self.known_survivors[target_survivor]
+
+        else:
+
+            target_health = 0
+
+        # Convert to compact discrete state
+        state = create_state(
+            local_observation=observation,
+            robot=self.robot,
+            target_survivor=target_survivor,
+            target_health=target_health,
+            battery=self.battery
+        )
+
+        return state
