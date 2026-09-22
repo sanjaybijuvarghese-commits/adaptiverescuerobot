@@ -1,46 +1,37 @@
 def calculate_reward(
-    moved,
-    hit_obstacle,
-    entered_hazard,
-    discovered_survivor,
-    rescued_survivor,
-    survivor_lost,
-    battery_empty,
-    mission_complete
+    moved=False,
+    hit_obstacle=False,
+    entered_hazard=False,
+    rescued_survivor=False,
+    is_ping_pong=False,
+    **kwargs
 ):
-
-    reward = 0
-
-    # 1. Normal movement
-    if moved:
-        reward -= 1
-
-    # 2. Hit obstacle / invalid movement
-    if hit_obstacle:
-        reward -= 5
-
-    # 3. Entered hazard
+    """
+    Robust reward function.
+    Accepts **kwargs so custom environmental flags
+    (e.g., discovered_survivor, battery_low, etc.) don't raise TypeError.
+    """
+    # 1. Catastrophic failures
     if entered_hazard:
-        reward -= 20
+        return -100.0
 
-    # 4. Discovered a survivor
-    if discovered_survivor:
-        reward += 10
+    # 2. Collisions
+    if hit_obstacle:
+        return -15.0
 
-    # 5. Rescued a survivor
+    # 3. High-value achievements
     if rescued_survivor:
-        reward += 50
+        return 150.0
 
-    # 6. Survivor was lost
-    if survivor_lost:
-        reward -= 50
+    if kwargs.get("discovered_survivor", False):
+        return 20.0
 
-    # 7. Battery became empty
-    if battery_empty:
-        reward -= 30
+    # 4. Anti-loop penalty
+    if is_ping_pong:
+        return -10.0
 
-    # 8. All survivors rescued
-    if mission_complete:
-        reward += 100
+    # 5. Regular movement step cost
+    if moved:
+        return -1.0
 
-    return reward
+    return 0.0
