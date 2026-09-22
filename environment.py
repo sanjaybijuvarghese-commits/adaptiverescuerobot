@@ -28,16 +28,13 @@ class Environment:
 
         self.hazard_spread_interval = HAZARD_SPREAD_INTERVAL
 
-                # -----------------------------
+        # -----------------------------
         # Robot's world model / memory
         # -----------------------------
 
         self.known_cells = {}
-
         self.known_survivors = {}
-
         self.known_hazards = set()
-
         self.known_obstacles = set()
 
         # Start first episode
@@ -68,7 +65,7 @@ class Environment:
         self.rescued_survivors = set()
         self.lost_survivors = set()
 
-                # Reset robot's world model / memory
+        # Reset robot's world model / memory
         self.known_cells = {}
         self.known_survivors = {}
         self.known_hazards = set()
@@ -156,11 +153,8 @@ class Environment:
 
             self.survivors.append(position)
 
-            # Random health
-            self.survivor_health[position] = random.randint(
-                50,
-                100
-            )
+            # Random health between 50 and 100
+            self.survivor_health[position] = random.randint(50, 100)
 
         # -----------------------------
         # Hazards
@@ -178,23 +172,13 @@ class Environment:
 
         while True:
 
-            row = random.randint(
-                0,
-                self.rows - 1
-            )
-
-            col = random.randint(
-                0,
-                self.cols - 2
-            )
+            row = random.randint(0, self.rows - 1)
+            col = random.randint(0, self.cols - 2)
 
             obstacle1 = (row, col)
             obstacle2 = (row, col + 1)
 
-            if (
-                self.is_free(obstacle1)
-                and self.is_free(obstacle2)
-            ):
+            if self.is_free(obstacle1) and self.is_free(obstacle2):
 
                 self.obstacles.append(obstacle1)
                 self.obstacles.append(obstacle2)
@@ -221,38 +205,28 @@ class Environment:
 
         # 0 = UP
         if action == 0:
-
             new_row = row - 1
             new_col = col
 
         # 1 = DOWN
         elif action == 1:
-
             new_row = row + 1
             new_col = col
 
         # 2 = LEFT
         elif action == 2:
-
             new_row = row
             new_col = col - 1
 
         # 3 = RIGHT
         elif action == 3:
-
             new_row = row
             new_col = col + 1
 
         else:
+            raise ValueError("Action must be 0, 1, 2, or 3.")
 
-            raise ValueError(
-                "Action must be 0, 1, 2, or 3."
-            )
-
-        new_position = (
-            new_row,
-            new_col
-        )
+        new_position = (new_row, new_col)
 
         # -----------------------------
         # Boundary check
@@ -264,7 +238,6 @@ class Environment:
             or new_col < 0
             or new_col >= self.cols
         ):
-
             return False, True, False
 
         # -----------------------------
@@ -272,7 +245,6 @@ class Environment:
         # -----------------------------
 
         if new_position in self.obstacles:
-
             return False, True, False
 
         # -----------------------------
@@ -282,14 +254,11 @@ class Environment:
         self.robot = new_position
 
         # Check hazard
-        entered_hazard = (
-            self.robot in self.hazards
-        )
+        entered_hazard = self.robot in self.hazards
 
         return True, False, entered_hazard
 
-
-        # ==================================================
+    # ==================================================
     # GET 3x3 LOCAL SENSOR OBSERVATION
     # ==================================================
 
@@ -342,7 +311,7 @@ class Environment:
 
         return observation
 
-        # ==================================================
+    # ==================================================
     # UPDATE WORLD MODEL
     # ==================================================
 
@@ -350,7 +319,6 @@ class Environment:
 
         row, col = self.robot
 
-        # Keep track of newly discovered survivors
         newly_discovered = []
 
         # Check the 3x3 area around the robot
@@ -369,64 +337,37 @@ class Environment:
 
                 cell = (r, c)
 
-                # -----------------------------
                 # Obstacle
-                # -----------------------------
-
                 if cell in self.obstacles:
-
                     self.known_cells[cell] = "obstacle"
                     self.known_obstacles.add(cell)
 
-                # -----------------------------
                 # Hazard
-                # -----------------------------
-
                 elif cell in self.hazards:
-
                     self.known_cells[cell] = "hazard"
                     self.known_hazards.add(cell)
 
-                # -----------------------------
                 # Survivor
-                # -----------------------------
-
                 elif cell in self.survivors:
-
                     self.known_cells[cell] = "survivor"
 
-                    # Check whether this survivor
-                    # was discovered for the first time
                     if cell not in self.known_survivors:
-
                         newly_discovered.append(cell)
 
-                    # Store current health
                     if cell in self.survivor_health:
+                        self.known_survivors[cell] = self.survivor_health[cell]
 
-                        self.known_survivors[cell] = (
-                            self.survivor_health[cell]
-                        )
-
-                # -----------------------------
                 # Robot
-                # -----------------------------
-
                 elif cell == self.robot:
-
                     self.known_cells[cell] = "robot"
 
-                # -----------------------------
                 # Empty
-                # -----------------------------
-
                 else:
-
                     self.known_cells[cell] = "empty"
 
         return newly_discovered
 
-        # ==================================================
+    # ==================================================
     # SELECT LOWEST-HEALTH DISCOVERED SURVIVOR
     # ==================================================
 
@@ -434,32 +375,24 @@ class Environment:
 
         candidates = {}
 
-        # Look only at survivors known to the robot
         for survivor, health in self.known_survivors.items():
 
-            # Ignore survivors already rescued
             if survivor in self.rescued_survivors:
                 continue
 
-            # Ignore survivors already lost
             if survivor in self.lost_survivors:
                 continue
 
             candidates[survivor] = health
 
-        # No valid known survivor
         if not candidates:
             return None
 
-        # Select survivor with the lowest known health
-        target = min(
-            candidates,
-            key=candidates.get
-        )
+        target = min(candidates, key=candidates.get)
 
-        return target             
+        return target
 
-        # ==================================================
+    # ==================================================
     # CHECK WHETHER ROBOT SHOULD EXPLORE
     # ==================================================
 
@@ -470,7 +403,7 @@ class Environment:
         if target is None:
             return True
 
-        return False   
+        return False
 
     # ==================================================
     # UPDATE SURVIVOR HEALTH
@@ -482,33 +415,22 @@ class Environment:
 
         for survivor in self.survivors:
 
-            # Already rescued
             if survivor in self.rescued_survivors:
                 continue
 
-            # Already lost
             if survivor in self.lost_survivors:
                 continue
 
-            # Health decreases
             self.survivor_health[survivor] -= 1
 
-            # Survivor dies
             if self.survivor_health[survivor] <= 0:
-
                 self.survivor_health[survivor] = 0
-
-                self.lost_survivors.add(
-                    survivor
-                )
-
-                newly_lost.append(
-                    survivor
-                )
+                self.lost_survivors.add(survivor)
+                newly_lost.append(survivor)
 
         return newly_lost
 
-        # ==================================================
+    # ==================================================
     # SYNCHRONIZE KNOWN SURVIVOR HEALTH
     # ==================================================
 
@@ -517,23 +439,26 @@ class Environment:
         for survivor in self.known_survivors:
 
             if survivor in self.survivor_health:
-
-                self.known_survivors[survivor] = (
-                    self.survivor_health[survivor]
-                )
+                self.known_survivors[survivor] = self.survivor_health[survivor]
 
     # ==================================================
-    # SPREAD HAZARDS
+    # SPREAD HAZARDS (THROTTLED & CAPPED)
     # ==================================================
 
     def spread_hazards(self):
 
         new_hazards = []
-
-        # Copy current hazards
         current_hazards = self.hazards.copy()
 
-        for hazard in current_hazards:
+        # Stop spreading if hazards exceed reasonable boundary
+        MAX_TOTAL_HAZARDS = 16
+        if len(self.hazards) >= MAX_TOTAL_HAZARDS:
+            return new_hazards
+
+        # Pick at most 2 active fire fronts to spread per interval
+        candidates = random.sample(current_hazards, min(2, len(current_hazards)))
+
+        for hazard in candidates:
 
             row, col = hazard
 
@@ -543,42 +468,37 @@ class Environment:
                 (row, col - 1),
                 (row, col + 1)
             ]
+            random.shuffle(neighbours)
 
             for cell in neighbours:
 
                 r, c = cell
 
-                # Boundary
                 if r < 0 or r >= self.rows:
                     continue
 
                 if c < 0 or c >= self.cols:
                     continue
 
-                # Cannot spread into obstacle
                 if cell in self.obstacles:
                     continue
 
-                # Already a hazard
                 if cell in self.hazards:
                     continue
 
-                # Already selected for spreading
                 if cell in new_hazards:
                     continue
 
-                # Don't place hazard on robot
                 if cell == self.robot:
                     continue
 
-                # Don't place hazard on rescued survivor
                 if cell in self.rescued_survivors:
                     continue
 
-                # 25% chance
-                if random.random() < 0.25:
-
+                # 30% chance to expand to ONE adjacent tile
+                if random.random() < 0.30:
                     new_hazards.append(cell)
+                    break
 
         self.hazards.extend(new_hazards)
 
@@ -590,27 +510,21 @@ class Environment:
 
     def rescue_survivor(self):
 
-        # Robot is not on a survivor
         if self.robot not in self.survivors:
-
             return False
 
         survivor = self.robot
 
         # Already rescued
         if survivor in self.rescued_survivors:
-
             return False
 
         # Already lost
         if survivor in self.lost_survivors:
-
             return False
 
-        # Rescue
-        self.rescued_survivors.add(
-            survivor
-        )
+        # Rescue survivor
+        self.rescued_survivors.add(survivor)
 
         return True
 
@@ -620,36 +534,18 @@ class Environment:
 
     def check_episode_end(self):
 
-        # -----------------------------
-        # All survivors rescued
-        # -----------------------------
-
         if len(self.rescued_survivors) == self.num_survivors:
-
             return True, "mission_complete"
 
-        # -----------------------------
-        # Battery empty
-        # -----------------------------
-
         if self.battery <= 0:
-
             return True, "battery_empty"
 
-        # -----------------------------
-        # All survivors lost
-        # -----------------------------
-
         if len(self.lost_survivors) == self.num_survivors:
-
             return True, "all_survivors_lost"
 
         return False, None
 
     # ==================================================
-    # ONE ENVIRONMENT STEP
-    # ==================================================
-        # ==================================================
     # ONE ENVIRONMENT STEP
     # ==================================================
 
@@ -659,7 +555,7 @@ class Environment:
         if self.terminated:
 
             return (
-                self.get_state(),
+                self.get_rl_state(),
                 0,
                 True,
                 {
@@ -679,10 +575,9 @@ class Environment:
 
         moved, hit_obstacle, entered_hazard = self.move_robot(action)
 
-        # Scan surroundings and detect newly discovered survivors
         newly_discovered = self.update_world_model()
 
-        discovered_survivor = len(newly_discovered) > 0 
+        discovered_survivor = len(newly_discovered) > 0
 
         # -----------------------------
         # Battery decreases
@@ -716,7 +611,6 @@ class Environment:
         hazards_spread = []
 
         if self.steps % self.hazard_spread_interval == 0:
-
             hazards_spread = self.spread_hazards()
 
         # -----------------------------
@@ -735,7 +629,7 @@ class Environment:
             moved=moved,
             hit_obstacle=hit_obstacle,
             entered_hazard=entered_hazard,
-            discovered_survivor=False,
+            discovered_survivor=discovered_survivor,
             rescued_survivor=rescued,
             survivor_lost=survivor_lost,
             battery_empty=(self.battery == 0),
@@ -761,7 +655,7 @@ class Environment:
         # Get next state
         # -----------------------------
 
-        next_state = self.get_state()
+        next_state = self.get_rl_state()
 
         # -----------------------------
         # Return
@@ -773,89 +667,44 @@ class Environment:
             done,
             info
         )
-        # ==================================================
-    # GET CURRENT STATE
+
+    # ==================================================
+    # GET CURRENT STATE (RAW DICTIONARY)
     # ==================================================
 
     def get_state(self):
 
         return {
-
-            # Robot
             "robot": self.robot,
-
-            # Actual environment information
             "survivors": self.survivors.copy(),
-
-            "survivor_health":
-                self.survivor_health.copy(),
-
-            "rescued_survivors":
-                self.rescued_survivors.copy(),
-
-            "lost_survivors":
-                self.lost_survivors.copy(),
-
-            "hazards":
-                self.hazards.copy(),
-
-            "obstacles":
-                self.obstacles.copy(),
-
-            # Battery
-            "battery":
-                self.battery,
-
-            # Episode step
-            "steps":
-                self.steps,
-
-            # -----------------------------
-            # Robot's local 3x3 observation
-            # -----------------------------
-
-            "local_observation":
-                self.get_local_observation(),
-
-            # -----------------------------
-            # Robot's world model / memory
-            # -----------------------------
-
-            "known_cells":
-                self.known_cells.copy(),
-
-            "known_survivors":
-                self.known_survivors.copy(),
-
-            "known_hazards":
-                self.known_hazards.copy(),
-
-            "known_obstacles":
-                self.known_obstacles.copy()
+            "survivor_health": self.survivor_health.copy(),
+            "rescued_survivors": self.rescued_survivors.copy(),
+            "lost_survivors": self.lost_survivors.copy(),
+            "hazards": self.hazards.copy(),
+            "obstacles": self.obstacles.copy(),
+            "battery": self.battery,
+            "steps": self.steps,
+            "local_observation": self.get_local_observation(),
+            "known_cells": self.known_cells.copy(),
+            "known_survivors": self.known_survivors.copy(),
+            "known_hazards": self.known_hazards.copy(),
+            "known_obstacles": self.known_obstacles.copy()
         }
 
-        # ==================================================
-    # GET COMPACT RL STATE
+    # ==================================================
+    # GET COMPACT RL STATE (HASHABLE TUPLE)
     # ==================================================
 
     def get_rl_state(self):
 
-        # Current 3x3 observation
         observation = self.get_local_observation()
-
-        # Select lowest-health discovered survivor
         target_survivor = self.select_target_survivor()
 
-        # Get target health
         if target_survivor is not None:
-
             target_health = self.known_survivors[target_survivor]
-
         else:
-
             target_health = 0
 
-        # Convert to compact discrete state
         state = create_state(
             local_observation=observation,
             robot=self.robot,

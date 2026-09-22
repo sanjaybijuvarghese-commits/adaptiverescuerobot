@@ -101,20 +101,15 @@ class Visualization:
                 )
             )
 
-        # -----------------------------
         # Draw Survivors
-        # -----------------------------
-
         for row, col in environment.survivors:
+            # Skip survivors already saved
+            if (row, col) in environment.rescued_survivors:
+                continue
 
             screen.blit(
-
                 self.survivor_img,
-
-                (
-                    col * CELL_SIZE + 7,
-                    row * CELL_SIZE + 7
-                )
+                (col * CELL_SIZE + 7, row * CELL_SIZE + 7)
             )
 
         # -----------------------------

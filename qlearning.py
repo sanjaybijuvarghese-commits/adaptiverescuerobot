@@ -5,9 +5,6 @@ import pygame
 from config import *
 from environment import Environment
 from visualization import Visualization
-# Assuming your encoder functions are in state_encoder.py
-# If they are inside environment.py, change this import accordingly:
-from state_encoder import create_state
 
 
 class QLearningAgent:
@@ -19,7 +16,7 @@ class QLearningAgent:
         self.epsilon_decay = epsilon_decay
         self.min_epsilon = min_epsilon
 
-        # Tabular Q-values stored as: {encoded_state_tuple: [q_0, q_1, q_2, q_3]}
+        # Tabular Q-values stored as: {state_tuple: [q0, q1, q2, q3]}
         self.q_table = {}
 
     def get_q_values(self, state):
@@ -66,49 +63,6 @@ class QLearningAgent:
 
 
 # ==========================================================
-# HELPER: CONVERT RAW ENV STATE TO ENCODED STATE
-# ==========================================================
-
-def extract_encoded_state(raw_state):
-    """
-    Selects the best target survivor from the robot's known memory
-    and feeds parameters into create_state().
-    """
-    robot = raw_state["robot"]
-    local_obs = raw_state["local_observation"]
-    battery = raw_state["battery"]
-    known_survivors = raw_state["known_survivors"]
-    rescued = raw_state["rescued_survivors"]
-    lost = raw_state["lost_survivors"]
-
-    # Filter out survivors that are already rescued or lost
-    active_targets = {
-        pos: health
-        for pos, health in known_survivors.items()
-        if pos not in rescued and pos not in lost
-    }
-
-    target_survivor = None
-    target_health = None
-
-    if active_targets:
-        # Target the nearest active known survivor using Manhattan distance
-        target_survivor = min(
-            active_targets.keys(),
-            key=lambda pos: abs(pos[0] - robot[0]) + abs(pos[1] - robot[1])
-        )
-        target_health = active_targets[target_survivor]
-
-    return create_state(
-        robot=robot,
-        local_observation=local_obs,
-        target_survivor=target_survivor,
-        target_health=target_health,
-        battery=battery
-    )
-
-
-# ==========================================================
 # FAST TRAINING PIPELINE (No Graphics)
 # ==========================================================
 
@@ -119,15 +73,14 @@ def train(episodes=2000):
     print(f"--- Starting Training ({episodes} episodes) ---")
 
     for ep in range(1, episodes + 1):
-        raw_state = env.reset()
-        state = extract_encoded_state(raw_state)
+        # env.reset() already returns the compact encoded tuple directly
+        state = env.reset()
         total_reward = 0
         done = False
 
         while not done:
             action = agent.choose_action(state)
-            raw_next_state, reward, done, info = env.step(action)
-            next_state = extract_encoded_state(raw_next_state)
+            next_state, reward, done, info = env.step(action)
 
             agent.update(state, action, reward, next_state, done)
 
@@ -149,7 +102,7 @@ def train(episodes=2000):
 # TEST SIMULATION (Live Pygame Window)
 # ==========================================================
 
-def run_simulation():
+def run_simulation(agent=None):
     pygame.init()
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("Adaptive Rescue Robot - Q-Learning Simulation")
@@ -158,18 +111,19 @@ def run_simulation():
     env = Environment()
     viz = Visualization()
 
-    agent = QLearningAgent(epsilon=0.0)  # Pure exploitation
-    try:
-        agent.load_policy("q_table.pkl")
-        print("Loaded trained policy from q_table.pkl")
-    except FileNotFoundError:
-        print("Warning: q_table.pkl not found! Robot will act randomly.")
+    if agent is None:
+        agent = QLearningAgent(epsilon=0.0)  # Pure exploitation
+        try:
+            agent.load_policy("q_table.pkl")
+            print("Loaded trained policy from q_table.pkl")
+        except FileNotFoundError:
+            print("Warning: q_table.pkl not found! Robot will act randomly.")
 
-    raw_state = env.reset()
-    state = extract_encoded_state(raw_state)
+    agent.epsilon = 0.0
 
+    state = env.reset()
     running = True
-    step_delay_ms = 200  # 200ms per step so the robot's choices are watchable
+    step_delay_ms = 200  # Delay per step in ms so movement is visible
     last_step_time = pygame.time.get_ticks()
 
     while running:
@@ -177,16 +131,15 @@ def run_simulation():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_r:  # Press R to reset the disaster scenario
-                    raw_state = env.reset()
-                    state = extract_encoded_state(raw_state)
+                if event.key == pygame.K_r:  # Press R to reset scenario
+                    state = env.reset()
 
-        # Run step on timer
+        # Step agent on timer
         now = pygame.time.get_ticks()
         if now - last_step_time >= step_delay_ms and not env.terminated:
             action = agent.choose_action(state)
-            raw_next_state, _, done, _ = env.step(action)
-            state = extract_encoded_state(raw_next_state)
+            next_state, _, done, _ = env.step(action)
+            state = next_state
             last_step_time = now
 
         viz.draw(screen, env)
@@ -197,8 +150,8 @@ def run_simulation():
 
 
 if __name__ == "__main__":
-    # 1. Train the agent
-    train(episodes=2000)
+    # 1. Train agent headlessly
+    trained_agent = train(episodes=2000)
 
-    # 2. Watch the learned policy run
-    run_simulation()
+    # 2. Watch learned policy in Pygame
+    run_simulation(trained_agent)
